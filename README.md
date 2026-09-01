@@ -1,4 +1,4 @@
-[odpowiedzi_na_obrone.md](https://github.com/user-attachments/files/31704861/odpowiedzi_na_obrone.md)
+[odpowiedzi_na_obrone.md](https://github.com/user-attachments/files/31704888/odpowiedzi_na_obrone.md)
 # ODPOWIEDZI NA OBRONĘ — GameHUB
 
 ---
