@@ -441,19 +441,3 @@ Nie mam dostępu do projektów innych osób z grupy, więc nie jestem w stanie p
 ### ODPOWIEDŹ:
 
 Tak samo jak wyżej — potrzebuję informacji o projektach kolegów, żeby się do nich odnieść. Nie chcę wymyślać porównania bez konkretnych podstaw.
-
----
-
----
-
-# NAJWAŻNIEJSZE RZECZY DO ZAPAMIĘTANIA NA OBRONĘ
-
-- **Stack technologiczny:** Laravel, Tailwind CSS, Blade, PostgreSQL, Alpine.js, Vite
-- **Dwie role:** admin (po e-mailu) i gracz. Admin zarządza grami/użytkownikami, gracz kupuje/zwraca gry
-- **Relacja wiele-do-wielu:** User ↔ Game, tabela pośrednia `game_user` z `purchase_price`, w modelu `belongsToMany`
-- **Portfel:** pole `balance` u użytkownika, doładowanie w `WalletController`, kupno/zwrot w `GameController`
-- **Walidacja:** `$request->validate()` w kontrolerach, błędy wyświetlane `@error` w Blade
-- **Routing:** `web.php`, middleware `auth`, metody GET/POST/PUT/DELETE, `@method('PUT')` w formularzach
-- **Własny middleware:** `NoCacheHeaders` — blokuje cache stron po wylogowaniu
-- **Główna słabość:** admin sprawdzany po e-mailu — powinno być pole `role` w bazie
-- **Kluczowe pliki:** `GameController.php`, `WalletController.php`, `RegisteredUserController.php`, `User.php`, `web.php`, `NoCacheHeaders.php`, `games/index.blade.php`, `games/create.blade.php`
