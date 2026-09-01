@@ -189,18 +189,3 @@ Największym minusem mojego projektu jest to, jak działa konto administratora i
 
 Żebym odpowiedział na to pytanie na obronie, prowadzący musiałby mi wcześniej pokazać (albo chociaż opisać) jakie projekty zrobili inni studenci z mojej grupy. Ponieważ ich nie znam, nie mam z czym porównać mojego sklepu GameHUB. 
 (Jeśli znasz projekty kolegów, przypomnij sobie, kto zrobił coś bardziej rozbudowanego - np. z podpiętą prawdziwą płatnością, a kto zrobił coś prostszego, np. sam statyczny HTML bez panelu logowania).
-
----
-
----
-
-# NAJWAŻNIEJSZE RZECZY DO ZAPAMIĘTANIA:
-*(do powiedzenia z pamięci na obronie, jak Cię o coś zapytają)*
-
-1. **W czym to napisałeś?** Backend to PHP + Laravel. Baza danych to PostgreSQL. Front-end to szablony Blade + Tailwind CSS.
-2. **Jak masz zrobioną bazę?** Główne tabele to `users` i `games`. Połączone są tabelą pośrednią `game_user`, bo to relacja wiele-do-wielu (i tam trzymam cenę, za którą gość kupił grę - kolumna `purchase_price`). W Laravelu w modelu ująłem to jako `belongsToMany`.
-3. **Skąd użytkownik ma monety?** W tabeli `users` dodałem pole `balance`. Aktualizuję je przy doładowaniach (w `WalletController`) i przy kupowaniu (w `GameController`).
-4. **Jak robisz walidację formularzy?** Używam `$request->validate()` z regułami takimi jak `required` czy `numeric`. Na widoku wyłapuję błędy przez `@error`.
-5. **Jak sprawdzasz admina?** Do poprawy, ale póki co: `str_contains(Auth::user()->email, 'admin')`.
-6. **Co to za Twój middleware?** `NoCacheHeaders` - mówi przeglądarce "nie zapisuj tego". Dzięki temu po wylogowaniu przycisk "wstecz" nie pokaże tajnych danych z pamięci podręcznej.
-7. **Skąd wziąłeś logowanie?** Z paczki *Laravel Breeze*, ona robi trasy do logowania, rejestracji i zmiany hasła. ja tylko dorobiłem to, co uważałem za stosowne.
