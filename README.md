@@ -1,4 +1,4 @@
-[odpowiedzi_na_obrone.md](https://github.com/user-attachments/files/31704252/odpowiedzi_na_obrone.md)
+[odpowiedzi_na_obrone.md](https://github.com/user-attachments/files/31704861/odpowiedzi_na_obrone.md)
 # ODPOWIEDZI NA OBRONĘ — GameHUB
 
 ---
@@ -189,3 +189,5 @@ Największym minusem mojego projektu jest to, jak działa konto administratora i
 
 Żebym odpowiedział na to pytanie na obronie, prowadzący musiałby mi wcześniej pokazać (albo chociaż opisać) jakie projekty zrobili inni studenci z mojej grupy. Ponieważ ich nie znam, nie mam z czym porównać mojego sklepu GameHUB. 
 (Jeśli znasz projekty kolegów, przypomnij sobie, kto zrobił coś bardziej rozbudowanego - np. z podpiętą prawdziwą płatnością, a kto zrobił coś prostszego, np. sam statyczny HTML bez panelu logowania).
+
+---
