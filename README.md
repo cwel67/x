@@ -1,4 +1,4 @@
-[odpowiedzi_na_obrone.md](https://github.com/user-attachments/files/31703925/odpowiedzi_na_obrone.md)
+[odpowiedzi_na_obrone.md](https://github.com/user-attachments/files/31704252/odpowiedzi_na_obrone.md)
 # ODPOWIEDZI NA OBRONĘ — GameHUB
 
 ---
@@ -161,11 +161,8 @@ Zabezpieczyłem też usuwanie kont. Normalnie admin może usunąć każdego, ale
 **Wskaż jedno miejsce do poprawy.**
 
 ### ODPOWIEDŹ:
-Zdecydowanie musiałbym poprawić system uprawnień.
-Teraz sprawdzam, czy ktoś jest administratorem na podstawie tego, czy w jego mailu jest słowo "admin" (`str_contains(Auth::user()->email, 'admin')`).
-
-Zrobiłem tak na szybko, ale to ma sporą dziurę — wystarczy, że ktoś założy sobie konto na e-mail `moj.admin@gmail.com` i aplikacja uzna go za szefa. W dodatku muszę powtarzać ten dziwny warunek w kilku kontrolerach i widokach.
-Powinienem w tabeli `users` w bazie dodać nową kolumnę, np. `role`, która by mówiła wprost, kto ma jakie uprawnienia.
+Sposób, w jaki sprawdzam, czy użytkownik jest administratorem. 
+Zamiast zrobić do tego osobną kolumnę w bazie danych, sprawdzam po prostu, czy adres e-mail zawiera słówko "admin" (`str_contains(Auth::user()->email, 'admin')`). Zrobiłem tak, żeby szybko rozdzielić widoki, ale to ogromna luka. Wystarczy, że ktoś założy konto o nazwie np. `jan.admin@gmail.com` i system z automatu da mu pełen dostęp do zarządzania sklepem i usuwania gier.
 
 ### CO POKAZAĆ:
 - `RegisteredUserController.php` — pokazać linijkę z `str_contains(...)`.
@@ -176,17 +173,15 @@ Powinienem w tabeli `users` w bazie dodać nową kolumnę, np. `role`, która by
 **Napisz 6–10 zdań, dlaczego projekt zasługuje na wskazaną ocenę.**
 
 ### ODPOWIEDŹ:
-Uważam, że to kawał solidnej roboty, bo zrobiłem w pełni działający sklep z grami od zera, łącząc Laravela z bazą PostgreSQL. Wszystko śmiga: rejestracja, logowanie i zarządzanie sesją, które oparłem na Laravel Breeze. Aplikacja ma wirtualną ekonomię — można doładować portfel, a potem kupować i zwracać gry, co fajnie obsługuję przez relacje wiele-do-wielu z tabelą pośrednią. Zabezpieczyłem system walidacjami, żeby nikt nie zapisał pustej gry ani ujemnej ceny, i dopisałem własny middleware chroniący przed wczytywaniem stron z cache'a po wylogowaniu. Front-end wygląda bardzo nowocześnie i responsywnie dzięki Tailwind CSS. Wprawdzie sposób rozpoznawania admina po mailu wypadałoby usprawnić, ale sama mechanika sklepu, filtrowania i bazy danych działa płynnie i bez błędów. 
+Uważam, że projekt zasługuje na ocenę dostateczną (3), bo spełnia najważniejsze, podstawowe wymagania. Zrobiłem działającą aplikację w Laravelu, która normalnie łączy się z bazą danych PostgreSQL. Użytkownik może się zarejestrować, zalogować i przeglądać listę gier w sklepie. Działa też prosty system kupowania i zwracania gier za wirtualne monety. Strona jakoś wygląda, bo użyłem gotowych klas Tailwind CSS. Dodałem prostą walidację, więc formularz nie przepuści całkiem pustych danych ani ujemnej ceny. Zrobiłem też podział na admina i zwykłego gracza, chociaż w bardzo uproszczony sposób. Aplikacja nie wyrzuca błędów przy normalnym przeklikaniu zakładek. Jest to raczej prosty projekt, ale działa poprawnie i robi to, co do niego należy.
 
 ---
 
 ## PYTANIE 11
-**Co poprawić, żeby projekt zasługiwał na wyższą ocenę?**
+**Co poprawić w pierwszej kolejności, aby projekt zasługiwał na wyższą ocenę?**
 
 ### ODPOWIEDŹ:
-Na sto procent ten system ról, o którym mówiłem wcześniej. Sprawdzanie uprawnień przez szukanie słówka "admin" w e-mailu to spore zagrożenie bezpieczeństwa.
-Żeby było profesjonalnie, dodałbym w tabeli użytkowników nową kolumnę `role`. Następnie napisałbym krótki middleware (np. `AdminMiddleware`), który odpalałby się tylko przy próbie wejścia na trasy administracyjne (w `web.php`).
-Dzięki temu wyczyściłbym wszystkie kontrolery z powtarzających się warunków if i wyeliminował lukę z zakładaniem konta na fałszywego maila.
+Największym minusem mojego projektu jest to, jak działa konto administratora i to musiałbym poprawić w pierwszej kolejności. Teraz sprawdzam tylko, czy ktoś wpisał słowo "admin" w swoim adresie e-mail. Przez to każdy może sobie założyć takie konto i mieć dostęp do wszystkiego. Żeby aplikacja zasługiwała na wyższą ocenę, musiałbym po prostu dodać kolumnę "rola" w tabeli użytkowników w bazie danych i na tej podstawie blokować dostęp do panelu. To od razu rozwiązałoby główny problem z bezpieczeństwem.
 
 ---
 
