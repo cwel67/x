@@ -1,193 +1,433 @@
-[odpowiedzi_na_obrone.md](https://github.com/user-attachments/files/31704888/odpowiedzi_na_obrone.md)
-# ODPOWIEDZI NA OBRONĘ — GameHUB
-
+[odpowiedzi_na_obrone_GameHUB_po_poprawkach.md](https://github.com/user-attachments/files/31727823/odpowiedzi_na_obrone_GameHUB_po_poprawkach.md)
 ---
 
-## PYTANIE 1
-**Opisz, jak aplikacja rozróżnia użytkowników o różnych uprawnieniach.**
+## 1. Jak aplikacja rozróżnia użytkowników o różnych uprawnieniach?
 
-### ODPOWIEDŹ:
-Podzieliłem użytkowników na admina i zwykłych graczy. Zrobiłem to najprościej jak się dało — sprawdzam po prostu, czy w adresie e-mail użytkownika jest słowo "admin".
+Aplikacja rozróżnia role użytkowników po kolumnie `is_admin` w tabeli `users`. Zwykły użytkownik ma `is_admin = false`, a administrator ma `is_admin = true`. Dzięki temu uprawnienia nie zależą od adresu e-mail ani od nazwy użytkownika.
 
-Na przykład: jak admin wejdzie na `/dashboard/users`, to widzi listę wszystkich kont i może je usuwać. Jak wejdzie tam zwykły gracz, to aplikacja wywali mu błąd 403 (brak dostępu).
+Administrator może dodawać, edytować i usuwać gry oraz zarządzać użytkownikami. Zwykły użytkownik może przeglądać gry, kupować je, zwracać, korzystać z portfela i własnej biblioteki. Nawet jeśli zwykły użytkownik ręcznie wpisze adres panelu administratora albo wyśle bezpośrednie żądanie HTTP, aplikacja zatrzyma go po stronie serwera i zwróci błąd `403`.
 
-Mam to zrobione w kontrolerze `RegisteredUserController.php`. Na samym początku metod dodawałem taki warunek:
+### Fragment: kolumna administratora w migracji
+
+`database/migrations/2026_09_02_003000_add_is_admin_to_users_table.php`
+
 ```php
-if (!str_contains(Auth::user()->email, 'admin')) {
-    abort(403, 'Nie masz uprawnień do przeglądania tej strony.');
+Schema::table('users', function (Blueprint $table) {
+    $table->boolean('is_admin')->default(false);
+});
+```
+
+### Fragment: model użytkownika
+
+`app/Models/User.php`
+
+```php
+protected $fillable = [
+    'name',
+    'email',
+    'password',
+    'balance',
+];
+
+protected function casts(): array
+{
+    return [
+        'password' => 'hashed',
+        'is_admin' => 'boolean',
+    ];
 }
 ```
-Dodatkowo w widokach, np. w `dashboard.blade.php`, używam zwykłego `@if`, żeby adminowi pokazywać przyciski zarządzania, a graczowi tylko polecane gry.
 
-### CO POKAZAĆ:
-- `RegisteredUserController.php` — warunek `abort(403)` na początku funkcji.
-- `dashboard.blade.php` — `@if` z podziałem na role.
+Ważne: `is_admin` nie znajduje się w `$fillable`, więc użytkownik nie może nadać sobie administratora przez zwykły formularz lub masowe przypisanie danych.
 
----
+### Fragment: middleware administratora
 
-## PYTANIE 2
-**Wybierz jedną akcję i opisz krok po kroku drogę danych.**
+`app/Http/Middleware/EnsureUserIsAdmin.php`
 
-### ODPOWIEDŹ:
-Opiszę to na przykładzie **kupowania gry**.
-
-1. **Widok:** Użytkownik widzi grę i klika "KUP" w pliku `games/index.blade.php`. To jest formularz wysyłający żądanie POST.
-2. **Trasa:** Żądanie leci do `web.php`. Tam łapie je trasa: `Route::post('/games/{game}/purchase', [GameController::class, 'purchase'])`.
-3. **Kontroler (logika):** W `GameController.php` funkcja `purchase()` sprawdza, czy gracz ma w ogóle kasę (monety) i czy czasem już tej gry nie kupił. Jeśli jest okej, odejmuję cenę od portfela (`$user->balance -= $price;`) i dodaję grę do konta przez relację (`$user->games()->attach(...)`).
-4. **Baza danych:** Laravel robi update tabeli `users` (zmienia balance) i dodaje wpis do tabeli `game_user`, która łączy gracza z grą (zapisuje też cenę zakupu).
-5. **Koniec (widok):** Funkcja zwraca `redirect()->back()`. Strona się odświeża, gracz widzi swój nowy stan konta i przycisk "KUP" zmienia się na "ZWRÓĆ GRĘ".
-
-### CO POKAZAĆ:
-1. `games/index.blade.php` — formularz z przyciskiem KUP.
-2. `web.php` — linijka z trasą `games.purchase`.
-3. `GameController.php` — kod funkcji `purchase()`.
-4. `User.php` — relacja `games()` z dopiskiem `belongsToMany`.
-5. Baza danych (opcjonalnie) — jak wygląda tabela pośrednia `game_user`.
-
----
-
-## PYTANIE 3
-**Wskaż miejsce, w którym aplikacja sprawdza poprawność danych.**
-
-### ODPOWIEDŹ:
-Sprawdzam to w kontrolerach za pomocą funkcji `$request->validate()`. Fajna sprawa jest przy dodawaniu nowej gry (`GameController.php`, metoda `store`).
-
-Sprawdzam tam np. czy tytuł w ogóle został wpisany, czy cena na pewno jest liczbą i czy nie jest mniejsza niż 0:
 ```php
-$validated = $request->validate([
-    'title' => 'required|max:255',
-    'price' => 'required|numeric|min:0',
-    // ...inne pola
+public function handle(Request $request, Closure $next): Response
+{
+    if ($request->user()?->is_admin !== true) {
+        abort(403);
+    }
+
+    return $next($request);
+}
+```
+
+### Fragment: rejestracja aliasu middleware
+
+`bootstrap/app.php`
+
+```php
+$middleware->alias([
+    'admin' => \App\Http\Middleware\EnsureUserIsAdmin::class,
 ]);
 ```
-Jak ktoś wpisze bzdury (np. ujemną cenę), formularz nie przejdzie. Strona odświeży się sama, a pod złym polem pojawi się czerwony komunikat. W widoku `games/create.blade.php` odpowiada za to funkcja `@error`.
-Co ważne, dzięki `old('title')` reszta poprawnych danych nie znika i nie trzeba wypełniać wszystkiego od nowa.
 
-### CO POKAZAĆ:
-- `GameController.php` — walidacja w metodzie `store()`.
-- `games/create.blade.php` — jak używam `@error` i `old()`.
+### Fragment: trasy administratora
 
----
+`routes/web.php`
 
-## PYTANIE 4
-**Wskaż przykład widoku, który jest dobrze zorganizowany.**
+```php
+Route::middleware(['auth', 'admin'])->group(function () {
+    Route::get('/admin/games/create', [GameController::class, 'create'])->name('games.create');
+    Route::post('/admin/games', [GameController::class, 'store'])->name('games.store');
+    Route::get('/admin/games/{game}/edit', [GameController::class, 'edit'])->name('games.edit');
+    Route::put('/admin/games/{game}', [GameController::class, 'update'])->name('games.update');
+    Route::delete('/admin/games/{game}', [GameController::class, 'destroy'])->name('games.destroy');
 
-### ODPOWIEDŹ:
-Na pewno formularz dodawania gry — `games/create.blade.php`.
-
-Uważam, że jest dobrze napisany, bo nie wklejałem tam całej struktury HTML, paska nawigacji ani stopki. Użyłem komponentu `<x-app-layout>`, który sam zaciąga ten cały "szkielet" z pliku `layouts/app.blade.php`. Dzięki temu kod się nie powtarza.
-Sam formularz też jest poukładany: każde pole ma obok labelkę, inputa i obsługę błędów. Jakbym musiał teraz dodać pole "wymagania wiekowe", to po prostu kopiuję jeden div z inputem, zmieniam nazwę i gotowe. Zmiany nie zepsują reszty strony.
-
-### CO POKAZAĆ:
-- `games/create.blade.php` — ogólny wygląd pliku (użycie `<x-app-layout>`).
-- `layouts/app.blade.php` — pokazanie, skąd bierze się główny szkielet strony.
+    Route::get('/dashboard/users', [RegisteredUserController::class, 'index'])->name('users.index');
+    Route::get('/dashboard/users/{user}/edit', [RegisteredUserController::class, 'edit'])->name('users.edit');
+    Route::put('/dashboard/users/{user}', [RegisteredUserController::class, 'update'])->name('users.update');
+    Route::delete('/dashboard/users/{user}', [RegisteredUserController::class, 'destroy'])->name('users.destroy');
+});
+```
 
 ---
 
-## PYTANIE 5
-**Wskaż funkcjonalność, której nie widać w interfejsie, ale jest ważna.**
+## 2. Jak działa proces zakupu gry?
 
-### ODPOWIEDŹ:
-Napisałem swój własny middleware o nazwie `NoCacheHeaders` (plik `app/Http/Middleware/NoCacheHeaders.php`).
+Proces zakupu zaczyna się w widoku, gdzie użytkownik klika przycisk kupna. Formularz wysyła żądanie `POST` na trasę `games.purchase`. Trasa prowadzi do metody `purchase()` w `GameController`.
 
-Nie widać tego na stronie, ale robi bardzo ważną rzecz z bezpieczeństwem. Kiedy użytkownik jest zalogowany, ten kod dodaje do odpowiedzi serwera nagłówki, które blokują zapisywanie strony w pamięci przeglądarki (cache).
-Dlaczego to takie ważne? Bo wyobraź sobie, że admin się wylogowuje, odchodzi od komputera, a ktoś podchodzi, klika strzałkę "Wstecz" w przeglądarce i widzi panel zarządzania, mimo że sesja już wygasła. Mój kod przed tym chroni — przeglądarka musi zawsze pytać serwera o nową stronę.
+Kontroler sprawdza, czy użytkownik ma wystarczającą liczbę monet oraz czy nie posiada już tej gry. Jeśli wszystko jest poprawne, aplikacja odejmuje cenę gry z salda użytkownika i zapisuje zakup w tabeli pośredniej `game_user`. W tej tabeli zapisywana jest także cena zakupu jako `purchase_price`.
 
-### CO POKAZAĆ:
-- `NoCacheHeaders.php` — pokazanie kodu tego middleware'a.
-- `bootstrap/app.php` — miejsce, gdzie go uruchomiłem globalnie.
+### Fragment: trasa zakupu
+
+`routes/web.php`
+
+```php
+Route::middleware(['auth'])->group(function () {
+    Route::post('/games/{game}/purchase', [GameController::class, 'purchase'])->name('games.purchase');
+    Route::post('/games/{game}/refund', [GameController::class, 'refund'])->name('games.refund');
+});
+```
+
+### Fragment: formularz zakupu w widoku
+
+`resources/views/games/index.blade.php`
+
+```blade
+<form action="{{ route('games.purchase', $game) }}" method="POST" class="w-full">
+    @csrf
+    <button type="submit" class="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition cursor-pointer">
+        KUP ({{ $game->price ?? 100 }} 🪙)
+    </button>
+</form>
+```
+
+### Fragment: logika zakupu
+
+`app/Http/Controllers/GameController.php`
+
+```php
+public function purchase(Request $request, Game $game)
+{
+    $user = Auth::user();
+    $price = (int) round($game->price ?? 100);
+
+    if ($user->balance < $price) {
+        return redirect()->back()->with('error', 'Masz za mało monet!');
+    }
+
+    if ($user->games()->where('game_id', $game->id)->exists()) {
+        return redirect()->back()->with('error', 'Posiadasz już tę grę!');
+    }
+
+    $user->balance -= $price;
+    $user->save();
+
+    $user->games()->attach($game->id, ['purchase_price' => $price]);
+
+    return redirect()->back()->with('success', 'Zakupiono grę: ' . $game->title);
+}
+```
 
 ---
 
-## PYTANIE 6
-**Opisz, jak aplikacja rozpoznaje, co użytkownik chce zrobić.**
+## 3. Jak są połączone warstwy aplikacji?
 
-### ODPOWIEDŹ:
-Robi to na podstawie systemu tras (routingu) w pliku `routes/web.php`. Aplikacja patrzy na adres (URL) i typ zapytania (GET, POST itd.).
+Projekt korzysta z typowej struktury Laravela. Żądanie trafia najpierw do trasy w `routes/web.php`, następnie do kontrolera, kontroler używa modeli i bazy danych, a wynik jest zwracany do widoku Blade.
 
-Dla przykładu z grami:
-- Jak wejdziesz na `/admin/games/create` przez **GET**, to kontroler po prostu wyświetli Ci formularz.
-- Ale jak wyślesz ten formularz na adres `/admin/games` przez **POST**, to kontroler wie, że ma zapisać nową grę w bazie.
+Przykład procesu zakupu:
 
-Z aktualizowaniem i usuwaniem jest mały myk, bo same przeglądarki potrafią wysłać tylko GET i POST. Więc w formularzach usuwania dodaję np. `@method('DELETE')`. Wtedy Laravel pod spodem orientuje się, że chodzi o skasowanie rekordu.
+1. Widok generuje formularz zakupu.
+2. Formularz wysyła żądanie do trasy `games.purchase`.
+3. Trasa kieruje żądanie do `GameController::purchase()`.
+4. Kontroler pobiera zalogowanego użytkownika i grę.
+5. Model `User` zapisuje relację z grą w tabeli `game_user`.
+6. Użytkownik wraca na stronę z komunikatem sukcesu albo błędu.
 
-### CO POKAZAĆ:
-- `web.php` — pokazanie różnic między trasami GET i POST.
-- `games/index.blade.php` — formularz usuwania gry z `@method('DELETE')`.
+### Fragment: relacja użytkownika z grami
 
----
+`app/Models/User.php`
 
-## PYTANIE 7
-**Opisz przykład powiązania danych w projekcie.**
-
-### ODPOWIEDŹ:
-Zrobiłem powiązanie między użytkownikami a grami w systemie wiele-do-wielu (jeden gracz ma wiele gier, jedna gra należy do wielu graczy).
-
-W bazie to są trzy tabele: `users`, `games` i tabela łącząca `game_user` (trzyma ID gracza, ID gry i za ile ją kupił).
-W kodzie, w modelu `User.php` opisałem to funkcją:
 ```php
 public function games()
 {
     return $this->belongsToMany(Game::class)->withPivot('purchase_price');
 }
 ```
-Dzięki temu w kontrolerze łatwo dodaję komuś grę: `$user->games()->attach()`.
-A w widoku mojej biblioteki (`my_library.blade.php`) po prostu lecę pętlą `@foreach($games as $game)` i wypisuję tytuły, które posiada zalogowany gość.
 
-### CO POKAZAĆ:
-- `User.php` — relacja `belongsToMany`.
-- `GameController.php` — przypisywanie gry przez `attach()`.
-- `games/my_library.blade.php` — pętla wyświetlająca gry gracza.
+### Fragment: tabela pośrednia zakupów
 
----
+`database/migrations/2026_06_05_113620_create_game_user_table.php`
 
-## PYTANIE 8
-**Opisz, jak aplikacja reaguje na nietypową sytuację.**
-
-### ODPOWIEDŹ:
-Zabezpieczyłem projekt przed różnymi dziwnymi sytuacjami.
-
-Na przykład przy kupowaniu gry: w `GameController.php` sprawdzam, czy gracz w ogóle ma wystarczająco monet na koncie. Jak nie ma, to anuluję akcję i rzucam go z powrotem do sklepu z alertem "Masz za mało monet!". Sprawdzam też, czy przypadkiem nie próbuje kupić gry, którą już ma.
-
-Zabezpieczyłem też usuwanie kont. Normalnie admin może usunąć każdego, ale w kontrolerze `RegisteredUserController` zrobiłem warunek: jeśli admin próbuje usunąć samego siebie (`Auth::id() === $user->id`), to wywalam mu błąd. Dzięki temu przypadkiem nie zablokuje sobie dostępu do systemu.
-
-### CO POKAZAĆ:
-- `GameController.php` — kod sprawdzający, czy gracz ma monety na koncie.
-- `RegisteredUserController.php` — if blokujący adminowi usunięcie własnego konta.
+```php
+Schema::create('game_user', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+    $table->foreignId('game_id')->constrained()->cascadeOnDelete();
+    $table->integer('purchase_price')->default(0);
+    $table->timestamp('created_at')->nullable();
+    $table->timestamp('updated_at')->nullable();
+    $table->unique(['user_id', 'game_id']);
+});
+```
 
 ---
 
-## PYTANIE 9
-**Wskaż jedno miejsce do poprawy.**
+## 4. Jak zabezpieczane są dane wprowadzane przez użytkownika?
 
-### ODPOWIEDŹ:
-Sposób, w jaki sprawdzam, czy użytkownik jest administratorem. 
-Zamiast zrobić do tego osobną kolumnę w bazie danych, sprawdzam po prostu, czy adres e-mail zawiera słówko "admin" (`str_contains(Auth::user()->email, 'admin')`). Zrobiłem tak, żeby szybko rozdzielić widoki, ale to ogromna luka. Wystarczy, że ktoś założy konto o nazwie np. `jan.admin@gmail.com` i system z automatu da mu pełen dostęp do zarządzania sklepem i usuwania gier.
+Dane są walidowane w kontrolerach przed zapisem do bazy. Przykładowo przy dodawaniu gry wymagane są tytuł, opis, producent, gatunek, data premiery i cena. Cena musi być liczbą i nie może być ujemna. Dzięki temu aplikacja nie zapisuje niepełnych lub błędnych danych.
 
-### CO POKAZAĆ:
-- `RegisteredUserController.php` — pokazać linijkę z `str_contains(...)`.
+Laravel automatycznie chroni formularze przed atakami CSRF przez dyrektywę `@csrf`. W formularzach edycji i usuwania używane są też odpowiednie metody HTTP przez `@method('PUT')` albo `@method('DELETE')`.
+
+### Fragment: walidacja gry
+
+`app/Http/Controllers/GameController.php`
+
+```php
+$validated = $request->validate([
+    'title' => 'required|max:255',
+    'description' => 'required',
+    'developer' => 'required',
+    'genre' => 'required',
+    'release_date' => 'required|date',
+    'image_url' => 'nullable|string',
+    'price' => 'required|numeric|min:0',
+]);
+```
+
+### Fragment: zabezpieczenie formularza tokenem CSRF
+
+```blade
+<form action="{{ route('games.store') }}" method="POST">
+    @csrf
+    <!-- pola formularza -->
+</form>
+```
+
+### Fragment: usuwanie przez metodę DELETE
+
+```blade
+<form action="{{ route('games.destroy', $game) }}" method="POST">
+    @csrf
+    @method('DELETE')
+    <button type="submit">Usuń</button>
+</form>
+```
 
 ---
 
-## PYTANIE 10
-**Napisz 6–10 zdań, dlaczego projekt zasługuje na wskazaną ocenę.**
+## 5. Który fragment kodu jest dobrze zorganizowany?
 
-### ODPOWIEDŹ:
-Uważam, że projekt zasługuje na ocenę dostateczną (3), bo spełnia najważniejsze, podstawowe wymagania. Zrobiłem działającą aplikację w Laravelu, która normalnie łączy się z bazą danych PostgreSQL. Użytkownik może się zarejestrować, zalogować i przeglądać listę gier w sklepie. Działa też prosty system kupowania i zwracania gier za wirtualne monety. Strona jakoś wygląda, bo użyłem gotowych klas Tailwind CSS. Dodałem prostą walidację, więc formularz nie przepuści całkiem pustych danych ani ujemnej ceny. Zrobiłem też podział na admina i zwykłego gracza, chociaż w bardzo uproszczony sposób. Aplikacja nie wyrzuca błędów przy normalnym przeklikaniu zakładek. Jest to raczej prosty projekt, ale działa poprawnie i robi to, co do niego należy.
+Dobrym przykładem jest middleware `EnsureUserIsAdmin`. Jest krótki, ma jedną odpowiedzialność i znajduje się w osobnym pliku. Dzięki temu sprawdzanie uprawnień administratora nie jest powtarzane w wielu kontrolerach.
+
+Jeśli w przyszłości trzeba zmienić sposób sprawdzania administratora, wystarczy zmienić jedno miejsce. Trasy pozostają czytelne, bo wystarczy dopisać middleware `admin`.
+
+### Fragment: middleware jako jedno miejsce kontroli uprawnień
+
+`app/Http/Middleware/EnsureUserIsAdmin.php`
+
+```php
+public function handle(Request $request, Closure $next): Response
+{
+    if ($request->user()?->is_admin !== true) {
+        abort(403);
+    }
+
+    return $next($request);
+}
+```
+
+### Fragment: użycie middleware na trasach
+
+`routes/web.php`
+
+```php
+Route::middleware(['auth', 'admin'])->group(function () {
+    Route::post('/admin/games', [GameController::class, 'store'])->name('games.store');
+    Route::put('/admin/games/{game}', [GameController::class, 'update'])->name('games.update');
+    Route::delete('/admin/games/{game}', [GameController::class, 'destroy'])->name('games.destroy');
+});
+```
 
 ---
 
-## PYTANIE 11
-**Co poprawić w pierwszej kolejności, aby projekt zasługiwał na wyższą ocenę?**
+## 6. Jaka funkcjonalność jest ważna, ale mało widoczna w interfejsie?
 
-### ODPOWIEDŹ:
-Największym minusem mojego projektu jest to, jak działa konto administratora i to musiałbym poprawić w pierwszej kolejności. Teraz sprawdzam tylko, czy ktoś wpisał słowo "admin" w swoim adresie e-mail. Przez to każdy może sobie założyć takie konto i mieć dostęp do wszystkiego. Żeby aplikacja zasługiwała na wyższą ocenę, musiałbym po prostu dodać kolumnę "rola" w tabeli użytkowników w bazie danych i na tej podstawie blokować dostęp do panelu. To od razu rozwiązałoby główny problem z bezpieczeństwem.
+Ważna, ale mało widoczna funkcjonalność to zabezpieczenie panelu administratora po stronie serwera. Użytkownik może nie widzieć przycisków administracyjnych, ale prawdziwe zabezpieczenie działa dopiero wtedy, gdy trasy są chronione przez middleware.
+
+Drugim przykładem jest blokowanie pamięci podręcznej dla stron po zalogowaniu. Dzięki temu po wylogowaniu użytkownik nie powinien wracać do chronionych ekranów przez przycisk „Wstecz” w przeglądarce.
+
+### Fragment: nagłówki blokujące cache
+
+`app/Http/Middleware/NoCacheHeaders.php`
+
+```php
+$response->headers->set('Cache-Control', 'no-cache, no-store, max-age=0, must-revalidate');
+$response->headers->set('Pragma', 'no-cache');
+$response->headers->set('Expires', 'Sat, 01 Jan 2000 00:00:00 GMT');
+```
+
+### Fragment: ochrona tras administratora
+
+```php
+Route::middleware(['auth', 'admin'])->group(function () {
+    Route::get('/dashboard/users', [RegisteredUserController::class, 'index'])->name('users.index');
+});
+```
 
 ---
 
-## PYTANIA 12 i 13 (Inne projekty z grupy)
+## 7. W jaki sposób aplikacja rozpoznaje, co użytkownik chce zrobić?
 
-Żebym odpowiedział na to pytanie na obronie, prowadzący musiałby mi wcześniej pokazać (albo chociaż opisać) jakie projekty zrobili inni studenci z mojej grupy. Ponieważ ich nie znam, nie mam z czym porównać mojego sklepu GameHUB. 
-(Jeśli znasz projekty kolegów, przypomnij sobie, kto zrobił coś bardziej rozbudowanego - np. z podpiętą prawdziwą płatnością, a kto zrobił coś prostszego, np. sam statyczny HTML bez panelu logowania).
+Aplikacja rozpoznaje akcję po adresie URL, metodzie HTTP i nazwie trasy. Przykładowo `POST /games/{game}/purchase` oznacza zakup gry, `POST /games/{game}/refund` oznacza zwrot gry, a `DELETE /admin/games/{game}` oznacza usunięcie gry przez administratora.
+
+W formularzach Laravel używa tokenu CSRF oraz ukrytych pól metody, aby zwykły formularz HTML mógł wykonać akcję `PUT` albo `DELETE`.
+
+### Fragment: trasy użytkownika
+
+`routes/web.php`
+
+```php
+Route::middleware(['auth'])->group(function () {
+    Route::post('/wallet/topup', [WalletController::class, 'topUp'])->name('wallet.topup');
+    Route::post('/games/{game}/purchase', [GameController::class, 'purchase'])->name('games.purchase');
+    Route::post('/games/{game}/refund', [GameController::class, 'refund'])->name('games.refund');
+});
+```
+
+### Fragment: trasy administratora
+
+```php
+Route::middleware(['auth', 'admin'])->group(function () {
+    Route::get('/admin/games/create', [GameController::class, 'create'])->name('games.create');
+    Route::post('/admin/games', [GameController::class, 'store'])->name('games.store');
+    Route::get('/admin/games/{game}/edit', [GameController::class, 'edit'])->name('games.edit');
+    Route::put('/admin/games/{game}', [GameController::class, 'update'])->name('games.update');
+    Route::delete('/admin/games/{game}', [GameController::class, 'destroy'])->name('games.destroy');
+});
+```
 
 ---
+
+## 8. Opisz przykład powiązania danych w projekcie
+
+Dobrym przykładem jest powiązanie użytkowników i gier. Jeden użytkownik może mieć wiele kupionych gier, a jedna gra może być kupiona przez wielu użytkowników. Jest to relacja wiele-do-wielu, zapisana w tabeli pośredniej `game_user`.
+
+Tabela `game_user` przechowuje `user_id`, `game_id` i `purchase_price`. Dzięki temu aplikacja wie, kto kupił którą grę i za jaką cenę. Relacja jest widoczna w bazie danych, modelu `User` i w widoku biblioteki użytkownika.
+
+### Fragment: migracja tabeli pośredniej
+
+`database/migrations/2026_06_05_113620_create_game_user_table.php`
+
+```php
+Schema::create('game_user', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+    $table->foreignId('game_id')->constrained()->cascadeOnDelete();
+    $table->integer('purchase_price')->default(0);
+    $table->timestamp('created_at')->nullable();
+    $table->timestamp('updated_at')->nullable();
+    $table->unique(['user_id', 'game_id']);
+});
+```
+
+### Fragment: relacja w modelu użytkownika
+
+`app/Models/User.php`
+
+```php
+public function games()
+{
+    return $this->belongsToMany(Game::class)->withPivot('purchase_price');
+}
+```
+
+---
+
+## 9. Jak aplikacja reaguje na nietypową sytuację?
+
+Aplikacja obsługuje kilka sytuacji błędnych. Jeśli użytkownik nie ma wystarczającej liczby monet, zakup zostaje przerwany. Jeśli użytkownik już posiada grę, nie może kupić jej drugi raz. Jeśli próbuje zwrócić grę, której nie posiada, aplikacja zwraca komunikat błędu.
+
+Dodatkowo administrator nie powinien usunąć samego siebie ani ostatniego konta administratora. To chroni system przed sytuacją, w której aplikacja zostaje bez administratora.
+
+### Fragment: za mało monet
+
+`app/Http/Controllers/GameController.php`
+
+```php
+if ($user->balance < $price) {
+    return redirect()->back()->with('error', 'Masz za mało monet!');
+}
+```
+
+### Fragment: blokada podwójnego zakupu
+
+```php
+if ($user->games()->where('game_id', $game->id)->exists()) {
+    return redirect()->back()->with('error', 'Posiadasz już tę grę!');
+}
+```
+
+### Fragment: zwrot tylko posiadanej gry
+
+```php
+$ownedGame = $user->games()->where('game_id', $game->id)->first();
+
+if (! $ownedGame) {
+    return redirect()->back()->with('error', 'Nie posiadasz tej gry, więc nie możesz jej zwrócić!');
+}
+```
+
+### Fragment: ochrona ostatniego administratora
+
+`app/Http/Controllers/Auth/RegisteredUserController.php`
+
+```php
+if ($user->is_admin && ! User::where('is_admin', true)->whereKeyNot($user->id)->exists()) {
+    return redirect()->route('users.index')
+        ->with('error', 'Bezpieczeństwo systemu: Nie możesz usunąć ostatniego administratora!');
+}
+```
+
+---
+
+## 10. Co warto poprawić w projekcie jako następny krok?
+
+Najważniejszą rzeczą do poprawy jest przygotowanie kompletnego środowiska testowego, aby testy można było uruchamiać jedną komendą lokalnie lub na serwerze CI. W projekcie są testy autoryzacji administratora, ale warto dopilnować, żeby narzędzie testowe było zawsze dostępne po instalacji zależności.
+
+Drugim usprawnieniem byłoby dodanie paginacji i wyszukiwarki do listy gier. Przy większej liczbie rekordów strona będzie wtedy wygodniejsza i szybsza w użyciu. Można też rozważyć upload okładek zamiast wpisywania samego adresu `image_url`.
+
+---
+
+## 11. Na jaką ocenę zasługuje projekt?
+
+Projekt zasługuje na dobrą ocenę, ponieważ ma działające logowanie, role użytkowników, panel administratora, bazę PostgreSQL, relacje między użytkownikami i grami, portfel, zakup oraz zwrot gier. Po poprawkach system administratora jest bezpieczniejszy, ponieważ nie zależy od adresu e-mail, tylko od pola `is_admin` w bazie.
+
+Projekt pokazuje znajomość Laravela: tras, kontrolerów, modeli, migracji, middleware, widoków Blade i relacji many-to-many. Dodatkowo została dodana komenda Artisan do bezpiecznego nadawania administratora istniejącemu użytkownikowi.
+
+Nie jest to jeszcze projekt idealny, bo można rozbudować testy, paginację, upload grafik i panel raportów. Jednak jako projekt zaliczeniowy jest kompletny i pokazuje większość wymaganych elementów aplikacji internetowej.
+
+---
+
+## 12. Co poprawić, żeby dostać wyższą ocenę?
+
+Aby projekt zasługiwał na wyższą ocenę, dodałbym pełną konfigurację testów automatycznych, paginację listy gier, wyszukiwarkę, upload okładek oraz bardziej rozbudowany panel administratora. Dobrym dodatkiem byłby raport sprzedaży: liczba zakupów, suma wydanych monet i najpopularniejsze gry.
+
+Warto byłoby też przenieść część autoryzacji do polityk Laravela, jeśli projekt dalej by się rozrastał. Middleware jest dobry na tym etapie, ale przy większej liczbie zasobów polityki mogą być czytelniejsze.
+
+---
+
