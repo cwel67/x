@@ -8,7 +8,7 @@ Model `User` jest powiązany z modelem `Role`. Metody `isAdmin()` i `isRegularUs
 
 1. **Widok `klient.blade.php`**: przycisk „Kup teraz” wysyła formularz `POST` na `/klient/karnety/{ticket}/kup`.
 
-   ![Widok klienta – formularz zakupu](01_widok_klienta.png)
+   ![Widok klienta – formularz zakupu](odpowiedzi_assets/01_widok_klienta.png)
 
 2. **`web.php`**: routing kieruje żądanie do `ClientDashboardController::buyTicket`.
 
